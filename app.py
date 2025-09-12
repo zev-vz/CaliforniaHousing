@@ -509,5 +509,6 @@ def predict_house_value(n_clicks, model_name, HouseAge, AveRooms, AveBedrms):
 import os
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8051))
-    app.run_server(debug=True, host='0.0.0.0', port=port)
+    import os
+    port = int(os.environ.get("PORT", 8051))  # Dynamic port for Render
+    app.run(debug=True, host='0.0.0.0', port=port)
