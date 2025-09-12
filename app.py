@@ -506,6 +506,8 @@ def predict_house_value(n_clicks, model_name, HouseAge, AveRooms, AveBedrms):
     return f"🏠 Predicted Value: ${predicted_price * 100_000:,.0f}", fig
 
 
-#Running app
+import os
+
 if __name__ == '__main__':
-    app.run(debug=True, port=8051)
+    port = int(os.environ.get('PORT', 8051))
+    app.run_server(debug=True, host='0.0.0.0', port=port)
