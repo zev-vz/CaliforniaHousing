@@ -1,9 +1,9 @@
+pip>=23.0
 setuptools>=65.0
 wheel
-pip>=23.0
 
-dash==2.13.0
-pandas==2.0.3
-numpy==1.25.0
-scikit-learn==1.3.2
-plotly==5.16.1
+dash
+pandas
+numpy
+scikit-learn
+plotly
