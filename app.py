@@ -12,6 +12,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 from joblib import load
+import os
+import threading
+from huggingface_hub import hf_hub_download, login
 
 #Fixing the SSL cert
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -40,13 +43,33 @@ X = df[predict_features]
 y = df['MedHouseVal']
 
 #Loading pre-trained models from models folder
-models = {
-    'Random Forest': load('models/random_forest.joblib'),
-    'Gradient Boosting': load('models/gradient_boosting.joblib'),
-    'Ridge': load('models/ridge.joblib'),
-    'Lasso': load('models/lasso.joblib'),
-    'Linear Regression': load('models/linear_regression.joblib')
+HF_REPO = "ZevvanZ/housing-random-forest"
+HF_MODEL_FILES = {
+    'Random Forest': 'random_forest.joblib'
 }
+HF_TOKEN = os.getenv("HF_TOKEN")
+if HF_TOKEN:
+    login(token=HF_TOKEN)
+
+models = {}
+_models_ready = False
+
+def _download_and_load_models():
+    global models, _models_ready
+    local_models = {}
+    try:
+        for display_name, filename in HF_MODEL_FILES.items():
+            local_path = hf_hub_download(repo_id=HF_REPO, filename=filename, repo_type="model")
+            local_models[display_name] = load(local_path)
+            print(f"[INFO] Background loaded model: {display_name}")
+        models = local_models
+        _models_ready = True
+        print("[INFO] All models loaded")
+    except Exception as e:
+        print(f"[ERROR] Failed to download/load models: {e}", flush=True)
+
+_thread = threading.Thread(target=_download_and_load_models, daemon=True)
+_thread.start()
 
 #Dash setup with external stylesheets for modern look
 app = dash.Dash(__name__,
@@ -225,7 +248,7 @@ def main_dashboard_layout():
                                 html.Label("🧠 ML Model", style={'fontWeight': '500', 'color': COLORS['dark']}),
                                 dcc.Dropdown(
                                     id='predict-model',
-                                    options=[{'label': f"🔬 {name}", 'value': name} for name in models.keys()],
+                                    options=[{'label': '🔬 Random Forest', 'value': 'Random Forest'}],
                                     value='Random Forest',
                                     style={'marginBottom': '16px'}
                                 ),
@@ -454,9 +477,29 @@ def update_dashboard(color_var, price_range, income_levels):
 def predict_value(n_clicks, model_name, age, rooms, bed):
     if n_clicks == 0:
         return "", go.Figure()
-    model = models[model_name]
-    input_df = pd.DataFrame([[age, rooms, bed]], columns=predict_features)
-    prediction = model.predict(input_df)[0]
+    if not _models_ready:
+        return "⏳ Models are still initializing — please try again in a few seconds.", go.Figure()
+
+    # Validate numeric inputs
+    try:
+        age_f = float(age) if age is not None else None
+        rooms_f = float(rooms) if rooms is not None else None
+        bed_f = float(bed) if bed is not None else None
+    except (ValueError, TypeError):
+        return "⚠️ Please enter valid numeric values for all inputs.", go.Figure()
+
+    if age_f is None or rooms_f is None or bed_f is None:
+        return "⚠️ Please fill in all input fields before generating a prediction.", go.Figure()
+
+    model = models.get(model_name)
+    if model is None:
+        return f"⚠️ Model '{model_name}' is not available.", go.Figure()
+
+    input_df = pd.DataFrame([[age_f, rooms_f, bed_f]], columns=predict_features)
+    try:
+        prediction = model.predict(input_df)[0]
+    except Exception as e:
+        return f"⚠️ Prediction failed: {e}", go.Figure()
 
     #Histogram showing where this prediction falls
     hist_fig = px.histogram(df, x='MedHouseVal', nbins=50, color_discrete_sequence=[COLORS['primary']])
@@ -473,4 +516,4 @@ def predict_value(n_clicks, model_name, age, rooms, bed):
 
 #Run server
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=False)
