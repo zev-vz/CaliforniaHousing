@@ -3,7 +3,9 @@ setuptools>=65.0
 wheel
 
 dash
+plotly
 pandas
 numpy
 scikit-learn
-plotly
+joblib
+huggingface_hub
