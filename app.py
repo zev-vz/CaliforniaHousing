@@ -14,16 +14,12 @@ import numpy as np
 from joblib import load
 import os
 import threading
-from huggingface_hub import hf_hub_download, login
 
-#Fixing the SSL cert
 ssl._create_default_https_context = ssl._create_unverified_context
 
-#Loading our dataset
 housing = fetch_california_housing(as_frame=True)
 df = housing.frame
 
-#Deriving columns
 df['PriceCategory'] = pd.cut(df['MedHouseVal'],
                              bins=[0, 1.5, 3, 5, float('inf')],
                              labels=['Budget', 'Mid-range', 'Expensive', 'Luxury'])
@@ -32,24 +28,17 @@ df['IncomeLevel'] = pd.cut(df['MedInc'],
                            bins=[0, 3, 6, 10, float('inf')],
                            labels=['Low', 'Medium', 'High', 'Very High'])
 
-#Clipping extremes for plotting
 df['AveRooms_clipped'] = np.clip(df['AveRooms'], 0, 10)
 df['Population_clipped'] = np.clip(df['Population'], 0, 5000)
 
-#Setting predictive features (only Age, Rooms, Bedrooms)
 predict_features = ['HouseAge', 'AveRooms', 'AveBedrms']
 df[predict_features] = df[predict_features].fillna(df[predict_features].median())
 X = df[predict_features]
 y = df['MedHouseVal']
 
-#Loading pre-trained models from models folder
-HF_REPO = "ZevvanZ/housing-random-forest"
-HF_MODEL_FILES = {
-    'Random Forest': 'random_forest.joblib'
+LOCAL_MODEL_FILES = {
+    'Random Forest': 'random_forest_float32.joblib'
 }
-HF_TOKEN = os.getenv("HF_TOKEN")
-if HF_TOKEN:
-    login(token=HF_TOKEN)
 
 models = {}
 _models_ready = False
@@ -58,9 +47,16 @@ def _download_and_load_models():
     global models, _models_ready
     local_models = {}
     try:
-        for display_name, filename in HF_MODEL_FILES.items():
-            local_path = hf_hub_download(repo_id=HF_REPO, filename=filename, repo_type="model")
-            local_models[display_name] = load(local_path)
+        for display_name, filename in LOCAL_MODEL_FILES.items():
+            local_path = os.path.join("models", filename)
+            if not os.path.exists(local_path):
+                alt = filename.replace("_float32", "")
+                alt_path = os.path.join("models", alt)
+                if os.path.exists(alt_path):
+                    local_path = alt_path
+                else:
+                    raise FileNotFoundError(f"{local_path} not found")
+            local_models[display_name] = load(local_path, mmap_mode='r')
             print(f"[INFO] Background loaded model: {display_name}")
         models = local_models
         _models_ready = True
@@ -71,7 +67,6 @@ def _download_and_load_models():
 _thread = threading.Thread(target=_download_and_load_models, daemon=True)
 _thread.start()
 
-#Dash setup with external stylesheets for modern look
 app = dash.Dash(__name__,
                 suppress_callback_exceptions=True,
                 external_stylesheets=[
@@ -79,7 +74,6 @@ app = dash.Dash(__name__,
                 ])
 server = app.server
 
-#Custom CSS styles
 COLORS = {
     'primary': '#667eea',
     'secondary': '#764ba2',
@@ -129,13 +123,11 @@ def create_metric_card(title, value, subtitle="", color=COLORS['primary']):
     })
 
 
-#Layout
 def main_dashboard_layout():
     income_counts = df['IncomeLevel'].value_counts().reset_index()
     income_counts.columns = ['IncomeLevel', 'Count']
 
     return html.Div([
-        #Header Section
         html.Div([
             html.H1("🏠 California Housing Market Dashboard",
                     style={'color': 'white', 'fontSize': '48px', 'fontWeight': '700', 'margin': '0'}),
@@ -144,7 +136,6 @@ def main_dashboard_layout():
                           'fontWeight': '300'})
         ], style=HEADER_STYLE),
 
-        #Key Metrics Section
         html.Div([
             html.H2("📊 Key Insights", style={'color': COLORS['dark'], 'marginBottom': '24px', 'fontWeight': '600'}),
             html.Div([
@@ -158,7 +149,6 @@ def main_dashboard_layout():
             ], style={'display': 'grid', 'gridTemplateColumns': 'repeat(auto-fit, minmax(250px, 1fr))', 'gap': '0'})
         ], style={'margin': '32px 16px'}),
 
-        #Control Panel
         html.Div([
             html.H3("🎛️ Controls", style={'color': COLORS['dark'], 'marginBottom': '24px', 'fontWeight': '600'}),
 
@@ -211,7 +201,6 @@ def main_dashboard_layout():
             ], style={'marginTop': '20px'})
         ], style=CARD_STYLE),
 
-        #Tabs with all content
         dcc.Tabs([
             dcc.Tab(label='🗺️ Map View', children=[
                 html.Div([
@@ -355,11 +344,9 @@ def main_dashboard_layout():
     })
 
 
-#App layout
 app.layout = main_dashboard_layout()
 
 
-#Main dashboard callback
 @app.callback(
     Output('california-map', 'figure'),
     Output('price-distribution', 'figure'),
@@ -377,7 +364,6 @@ def update_dashboard(color_var, price_range, income_levels):
         (df['IncomeLevel'].isin(income_levels))
         ]
 
-    #Map with modern styling
     map_fig = px.scatter_mapbox(
         filtered_df,
         lat='Latitude',
@@ -400,7 +386,6 @@ def update_dashboard(color_var, price_range, income_levels):
         plot_bgcolor=COLORS['light']
     )
 
-    #Distribution Plot
     dist_fig = px.histogram(
         filtered_df,
         x='MedHouseVal',
@@ -414,7 +399,6 @@ def update_dashboard(color_var, price_range, income_levels):
         plot_bgcolor=COLORS['light']
     )
 
-    #Correlation Heatmap
     corr = filtered_df[predict_features + ['MedHouseVal']].corr()
     corr_fig = px.imshow(
         corr,
@@ -428,7 +412,6 @@ def update_dashboard(color_var, price_range, income_levels):
         plot_bgcolor=COLORS['light']
     )
 
-    #Scatter plot
     scatter_fig = px.scatter(
         filtered_df,
         x='AveRooms_clipped',
@@ -443,7 +426,6 @@ def update_dashboard(color_var, price_range, income_levels):
         plot_bgcolor=COLORS['light']
     )
 
-    #Feature comparison
     feature_fig = go.Figure()
     for feature in predict_features:
         feature_fig.add_trace(go.Scatter(
@@ -464,7 +446,6 @@ def update_dashboard(color_var, price_range, income_levels):
     return map_fig, dist_fig, corr_fig, scatter_fig, feature_fig
 
 
-#Prediction Callback
 @app.callback(
     Output('prediction-output', 'children'),
     Output('prediction-histogram', 'figure'),
@@ -480,7 +461,6 @@ def predict_value(n_clicks, model_name, age, rooms, bed):
     if not _models_ready:
         return "⏳ Models are still initializing — please try again in a few seconds.", go.Figure()
 
-    # Validate numeric inputs
     try:
         age_f = float(age) if age is not None else None
         rooms_f = float(rooms) if rooms is not None else None
@@ -501,7 +481,6 @@ def predict_value(n_clicks, model_name, age, rooms, bed):
     except Exception as e:
         return f"⚠️ Prediction failed: {e}", go.Figure()
 
-    #Histogram showing where this prediction falls
     hist_fig = px.histogram(df, x='MedHouseVal', nbins=50, color_discrete_sequence=[COLORS['primary']])
     hist_fig.add_vline(x=prediction, line_dash='dash', line_color=COLORS['danger'],
                        annotation_text="Your Prediction", annotation_position="top right")
@@ -514,6 +493,5 @@ def predict_value(n_clicks, model_name, age, rooms, bed):
     return f"🏷️ Predicted Median House Value: ${prediction * 100_000:,.0f}", hist_fig
 
 
-#Run server
 if __name__ == '__main__':
     app.run(debug=True, use_reloader=False)
