@@ -1,3 +1,8 @@
+"""
+Created on 1/7/26
+@author: zevvanzanten
+"""
+
 import ssl
 from sklearn.datasets import fetch_california_housing
 import pandas as pd
@@ -6,8 +11,7 @@ from dash import dcc, html, Input, Output
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.linear_model import Ridge, Lasso, LinearRegression
+from joblib import load
 
 #Fixing the SSL cert
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -35,16 +39,14 @@ df[predict_features] = df[predict_features].fillna(df[predict_features].median()
 X = df[predict_features]
 y = df['MedHouseVal']
 
-#Training multiple regressors
+#Loading pre-trained models from models folder
 models = {
-    'Random Forest': RandomForestRegressor(n_estimators=500, random_state=42),
-    'Gradient Boosting': GradientBoostingRegressor(n_estimators=500, learning_rate=0.05, max_depth=5, random_state=42),
-    'Ridge': Ridge(alpha=1.0),
-    'Lasso': Lasso(alpha=0.1),
-    'Linear Regression': LinearRegression()
+    'Random Forest': load('models/random_forest.joblib'),
+    'Gradient Boosting': load('models/gradient_boosting.joblib'),
+    'Ridge': load('models/ridge.joblib'),
+    'Lasso': load('models/lasso.joblib'),
+    'Linear Regression': load('models/linear_regression.joblib')
 }
-for name, model in models.items():
-    model.fit(X, y)
 
 #Dash setup with external stylesheets for modern look
 app = dash.Dash(__name__,
@@ -370,82 +372,76 @@ def update_dashboard(color_var, price_range, income_levels):
     )
     map_fig.update_layout(
         height=500,
-        margin={'l': 0, 'r': 0, 't': 50, 'b': 0},
-        title_font_size=18,
-        title_font_color=COLORS['dark'],
-        paper_bgcolor='white'
+        margin={"r":0,"t":50,"l":0,"b":0},
+        paper_bgcolor=COLORS['light'],
+        plot_bgcolor=COLORS['light']
     )
 
-    #price distribution
-    price_fig = px.histogram(
+    #Distribution Plot
+    dist_fig = px.histogram(
         filtered_df,
         x='MedHouseVal',
-        nbins=30,
-        title='💰 House Value Distribution',
-        labels={'MedHouseVal': 'Median House Value ($100K)'},
-        color_discrete_sequence=[COLORS['primary']]
+        nbins=50,
+        color_discrete_sequence=[COLORS['primary']],
+        title='📊 Median House Value Distribution'
     )
-    price_fig.update_layout(
-        title_font_size=16,
-        title_font_color=COLORS['dark'],
-        paper_bgcolor='white'
-    )
-
-    #Correlation heatmap
-    numeric_cols = ['MedInc', 'HouseAge', 'AveRooms_clipped', 'AveBedrms', 'Population_clipped', 'AveOccup',
-                    'MedHouseVal']
-    correlation_matrix = filtered_df[numeric_cols].corr()
-    heatmap_fig = px.imshow(
-        correlation_matrix,
-        text_auto='.2f',
-        aspect="auto",
-        title="🔍 Feature Correlations Matrix",
-        color_continuous_scale='RdBu'
-    )
-    heatmap_fig.update_layout(
-        title_font_size=18,
-        title_font_color=COLORS['dark'],
-        paper_bgcolor='white'
+    dist_fig.update_layout(
+        height=400,
+        paper_bgcolor=COLORS['light'],
+        plot_bgcolor=COLORS['light']
     )
 
-    # Enhanced scatter plot
+    #Correlation Heatmap
+    corr = filtered_df[predict_features + ['MedHouseVal']].corr()
+    corr_fig = px.imshow(
+        corr,
+        text_auto=True,
+        color_continuous_scale='Viridis',
+        title='🔗 Feature Correlation Heatmap'
+    )
+    corr_fig.update_layout(
+        height=400,
+        paper_bgcolor=COLORS['light'],
+        plot_bgcolor=COLORS['light']
+    )
+
+    #Scatter plot
     scatter_fig = px.scatter(
         filtered_df,
-        x='MedInc',
+        x='AveRooms_clipped',
         y='MedHouseVal',
-        color='HouseAge',
-        size='Population_clipped',
-        hover_data=['Latitude', 'Longitude'],
-        title='💵 Income vs House Value Relationship',
-        labels={'MedInc': 'Median Income', 'MedHouseVal': 'Median House Value ($100K)'},
-        color_continuous_scale='Viridis'
+        color='IncomeLevel',
+        hover_data=['HouseAge', 'AveBedrms'],
+        title='🏠 House Value vs Avg Rooms'
     )
     scatter_fig.update_layout(
-        title_font_size=16,
-        title_font_color=COLORS['dark'],
-        paper_bgcolor='white'
+        height=400,
+        paper_bgcolor=COLORS['light'],
+        plot_bgcolor=COLORS['light']
     )
 
-    #Box plot
-    feature_fig = px.box(
-        filtered_df,
-        x='PriceCategory',
-        y='MedInc',
-        title='💼 Income Distribution by Price Category',
-        labels={'MedInc': 'Median Income', 'PriceCategory': 'Price Category'},
-        color='PriceCategory',
-        color_discrete_sequence=px.colors.qualitative.Set2
-    )
+    #Feature comparison
+    feature_fig = go.Figure()
+    for feature in predict_features:
+        feature_fig.add_trace(go.Scatter(
+            x=filtered_df[feature],
+            y=filtered_df['MedHouseVal'],
+            mode='markers',
+            name=feature
+        ))
     feature_fig.update_layout(
-        title_font_size=16,
-        title_font_color=COLORS['dark'],
-        paper_bgcolor='white'
+        title='🔍 Feature Comparison with Median House Value',
+        xaxis_title='Feature Value',
+        yaxis_title='Median House Value',
+        height=400,
+        paper_bgcolor=COLORS['light'],
+        plot_bgcolor=COLORS['light']
     )
 
-    return map_fig, price_fig, heatmap_fig, scatter_fig, feature_fig
+    return map_fig, dist_fig, corr_fig, scatter_fig, feature_fig
 
 
-#Predictive analytics callback
+#Prediction Callback
 @app.callback(
     Output('prediction-output', 'children'),
     Output('prediction-histogram', 'figure'),
@@ -455,60 +451,26 @@ def update_dashboard(color_var, price_range, income_levels):
     Input('input-AveRooms', 'value'),
     Input('input-AveBedrms', 'value')
 )
-def predict_house_value(n_clicks, model_name, HouseAge, AveRooms, AveBedrms):
+def predict_value(n_clicks, model_name, age, rooms, bed):
     if n_clicks == 0:
-        fig = px.histogram(
-            df,
-            x='MedHouseVal',
-            nbins=30,
-            title='📊 Overall House Value Distribution',
-            color_discrete_sequence=[COLORS['primary']]
-        )
-        fig.update_layout(
-            title_font_size=16,
-            title_font_color=COLORS['dark'],
-            paper_bgcolor='white'
-        )
-        return "👆 Enter values above and click 'Generate Prediction' to get started!", fig
+        return "", go.Figure()
+    model = models[model_name]
+    input_df = pd.DataFrame([[age, rooms, bed]], columns=predict_features)
+    prediction = model.predict(input_df)[0]
 
-    #Filling missing values with median
-    input_dict = {
-        'HouseAge': HouseAge if HouseAge is not None else df['HouseAge'].median(),
-        'AveRooms': AveRooms if AveRooms is not None else df['AveRooms'].median(),
-        'AveBedrms': AveBedrms if AveBedrms is not None else df['AveBedrms'].median()
-    }
-    input_df = pd.DataFrame([input_dict])
-    predicted_price = models[model_name].predict(input_df)[0]
-
-    fig = px.histogram(
-        df,
-        x='MedHouseVal',
-        nbins=30,
-        title='🎯 Your Prediction vs Market Distribution',
-        color_discrete_sequence=[COLORS['muted']]
+    #Histogram showing where this prediction falls
+    hist_fig = px.histogram(df, x='MedHouseVal', nbins=50, color_discrete_sequence=[COLORS['primary']])
+    hist_fig.add_vline(x=prediction, line_dash='dash', line_color=COLORS['danger'],
+                       annotation_text="Your Prediction", annotation_position="top right")
+    hist_fig.update_layout(
+        title='Prediction in Context',
+        height=400,
+        paper_bgcolor=COLORS['light'],
+        plot_bgcolor=COLORS['light']
     )
-    fig.add_vline(
-        x=predicted_price,
-        line_dash='dash',
-        line_color=COLORS['success'],
-        line_width=3,
-        annotation_text=f'Predicted: ${predicted_price * 100_000:,.0f}',
-        annotation_position='top right',
-        annotation_font_size=14,
-        annotation_font_color=COLORS['success']
-    )
-    fig.update_layout(
-        title_font_size=16,
-        title_font_color=COLORS['dark'],
-        paper_bgcolor='white'
-    )
-
-    return f"🏠 Predicted Value: ${predicted_price * 100_000:,.0f}", fig
+    return f"🏷️ Predicted Median House Value: ${prediction * 100_000:,.0f}", hist_fig
 
 
-import os
-
+#Run server
 if __name__ == '__main__':
-    import os
-    port = int(os.environ.get("PORT", 8051))  # Dynamic port for Render
-    app.run(debug=True, host='0.0.0.0', port=port)
+    app.run(debug=True)
