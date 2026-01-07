@@ -14,6 +14,7 @@ import numpy as np
 from joblib import load
 import os
 import threading
+from huggingface_hub import hf_hub_download, login
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -36,9 +37,13 @@ df[predict_features] = df[predict_features].fillna(df[predict_features].median()
 X = df[predict_features]
 y = df['MedHouseVal']
 
-LOCAL_MODEL_FILES = {
+HF_REPO = "ZevvanZ/housing-random-forest"
+HF_MODEL_FILES = {
     'Random Forest': 'random_forest_float32.joblib'
 }
+HF_TOKEN = os.getenv("HF_TOKEN")
+if HF_TOKEN:
+    login(token=HF_TOKEN)
 
 models = {}
 _models_ready = False
@@ -47,8 +52,11 @@ def _download_and_load_models():
     global models, _models_ready
     local_models = {}
     try:
-        for display_name, filename in LOCAL_MODEL_FILES.items():
-            local_path = os.path.join("models", filename)
+        for display_name, filename in HF_MODEL_FILES.items():
+            try:
+                local_path = hf_hub_download(repo_id=HF_REPO, filename=filename, repo_type="model")
+            except Exception:
+                local_path = os.path.join("models", filename)
             if not os.path.exists(local_path):
                 alt = filename.replace("_float32", "")
                 alt_path = os.path.join("models", alt)
