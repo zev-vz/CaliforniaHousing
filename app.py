@@ -502,4 +502,5 @@ def predict_value(n_clicks, model_name, age, rooms, bed):
 
 
 if __name__ == '__main__':
-    app.run(debug=True, use_reloader=False)
+    port = int(os.environ.get("PORT", 8050))
+    app.run_server(host="0.0.0.0", port=port, debug=False, use_reloader=False)
