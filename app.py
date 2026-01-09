@@ -1,8 +1,3 @@
-"""
-Created on 1/7/26
-@author: zevvanzanten
-"""
-
 import ssl
 from sklearn.datasets import fetch_california_housing
 import pandas as pd
@@ -12,9 +7,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 from joblib import load
+from sklearn.linear_model import LinearRegression
 import os
-import threading
-from huggingface_hub import hf_hub_download, login
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -37,43 +31,12 @@ df[predict_features] = df[predict_features].fillna(df[predict_features].median()
 X = df[predict_features]
 y = df['MedHouseVal']
 
-HF_REPO = "ZevvanZ/housing-random-forest"
-HF_MODEL_FILES = {
-    'Random Forest': 'random_forest_float32.joblib'
+models = {
+    'Gradient Boosting': load('models/gradient_boosting_float32.joblib'),
+    'Ridge': load('models/ridge_float32.joblib'),
+    'Lasso': load('models/lasso_float32.joblib'),
+    'Linear Regression': load('models/linear_regression_float32.joblib')
 }
-HF_TOKEN = os.getenv("HF_TOKEN")
-if HF_TOKEN:
-    login(token=HF_TOKEN)
-
-models = {}
-_models_ready = False
-
-def _download_and_load_models():
-    global models, _models_ready
-    local_models = {}
-    try:
-        for display_name, filename in HF_MODEL_FILES.items():
-            try:
-                local_path = hf_hub_download(repo_id=HF_REPO, filename=filename, repo_type="model")
-            except Exception:
-                local_path = os.path.join("models", filename)
-            if not os.path.exists(local_path):
-                alt = filename.replace("_float32", "")
-                alt_path = os.path.join("models", alt)
-                if os.path.exists(alt_path):
-                    local_path = alt_path
-                else:
-                    raise FileNotFoundError(f"{local_path} not found")
-            local_models[display_name] = load(local_path, mmap_mode='r')
-            print(f"[INFO] Background loaded model: {display_name}")
-        models = local_models
-        _models_ready = True
-        print("[INFO] All models loaded")
-    except Exception as e:
-        print(f"[ERROR] Failed to download/load models: {e}", flush=True)
-
-_thread = threading.Thread(target=_download_and_load_models, daemon=True)
-_thread.start()
 
 app = dash.Dash(__name__,
                 suppress_callback_exceptions=True,
@@ -245,8 +208,13 @@ def main_dashboard_layout():
                                 html.Label("🧠 ML Model", style={'fontWeight': '500', 'color': COLORS['dark']}),
                                 dcc.Dropdown(
                                     id='predict-model',
-                                    options=[{'label': '🔬 Random Forest', 'value': 'Random Forest'}],
-                                    value='Random Forest',
+                                    options=[
+                                        {'label': '⛰️ Gradient Boosting', 'value': 'Gradient Boosting'},
+                                        {'label': '📐 Ridge', 'value': 'Ridge'},
+                                        {'label': '✂️ Lasso', 'value': 'Lasso'},
+                                        {'label': '🔬 Linear Regression', 'value': 'Linear Regression'}
+                                    ],
+                                    value='Linear Regression',
                                     style={'marginBottom': '16px'}
                                 ),
 
@@ -466,8 +434,6 @@ def update_dashboard(color_var, price_range, income_levels):
 def predict_value(n_clicks, model_name, age, rooms, bed):
     if n_clicks == 0:
         return "", go.Figure()
-    if not _models_ready:
-        return "⏳ Models are still initializing — please try again in a few seconds.", go.Figure()
 
     try:
         age_f = float(age) if age is not None else None
