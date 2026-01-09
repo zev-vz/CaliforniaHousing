@@ -31,11 +31,13 @@ df[predict_features] = df[predict_features].fillna(df[predict_features].median()
 X = df[predict_features]
 y = df['MedHouseVal']
 
+base_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
+
 models = {
-    'Gradient Boosting': load('models/gradient_boosting_float32.joblib'),
-    'Ridge': load('models/ridge_float32.joblib'),
-    'Lasso': load('models/lasso_float32.joblib'),
-    'Linear Regression': load('models/linear_regression_float32.joblib')
+    'Gradient Boosting': load(os.path.join(base_dir, 'gradient_boosting_float32.joblib')),
+    'Ridge': load(os.path.join(base_dir, 'ridge_float32.joblib')),
+    'Lasso': load(os.path.join(base_dir, 'lasso_float32.joblib')),
+    'Linear Regression': load(os.path.join(base_dir, 'linear_regression_float32.joblib'))
 }
 
 app = dash.Dash(__name__,
