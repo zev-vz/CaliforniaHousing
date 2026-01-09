@@ -2,6 +2,8 @@
 
 A modern, interactive dashboard built with Dash and Plotly to explore the 1990 California Census housing dataset. Visualize housing characteristics, analyze feature correlations, and generate AI-powered house value predictions using multiple machine learning models.
 
+https://californiahousing-u67d.onrender.com/
+
 ## 🎯 Executive Summary
 
 This dashboard allows users to:
