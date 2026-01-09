@@ -10,7 +10,6 @@ This dashboard allows users to:
 - Analyze key housing metrics: median house value, income, house age, and more
 - Visualize feature distributions, correlations, and scatter plots
 - Generate predictions for house values using:
-  - Random Forest
   - Gradient Boosting
   - Ridge
   - Lasso
@@ -55,7 +54,7 @@ This dashboard allows users to:
 
 ## 🔬 Predictive Modeling
 
-- **Models Included:** Random Forest, Gradient Boosting, Ridge, Lasso, Linear Regression
+- **Models Included:** Gradient Boosting, Ridge, Lasso, Linear Regression
 - **Features Used for Prediction:** HouseAge, AveRooms, AveBedrms
 - **Prediction Output:** Estimated house value with visualization against market distribution
 - **Confidence Handling:** Missing inputs automatically filled with median values
